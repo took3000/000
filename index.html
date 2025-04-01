@@ -1,1 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>宇宙粒子沙盒 | 重力模拟器</title>
+  <style>
+    :root {
+      --bg-color: rgba(15, 15, 25, 0.85);
+      --glass-color: rgba(40, 40, 60, 0.6);
+      --accent-color: hsl(260, 80%, 60%);
+      --text-color: rgba(255, 255, 255, 0.9);
+      --shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
 
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: url('https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?w=1000&auto=format') center/cover fixed;
+      overflow: hidden;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      height: 100vh;
+    }
+
+    /* 毛玻璃背景层 */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      backdrop-filter: blur(12px) brightness(0.6);
+      z-index: -1;
+    }
+
+    canvas {
+      display: block;
+      cursor: crosshair;
+    }
+
+    /* 控制面板 - 毛玻璃效果 */
+    #controls {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: var(--glass-color);
+      backdrop-filter: blur(16px);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-color);
+      width: 280px;
+      transition: all 0.3s ease;
+    }
+
+    #controls:hover {
+      background: rgba(50, 50, 70, 0.7);
+    }
+
+    .panel-title {
+      display: flex;
+      align-items: center;
+      margin-bottom: 16px;
+      font-weight: 600;
+    }
+
+    .panel-title svg {
+      margin-right: 8px;
+      fill: var(--accent-color);
+    }
+
+    .control-group {
+      margin-bottom: 12px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+      opacity: 0.8;
+    }
+
+    /* 美化滑动条 */
+    input[type="range"] {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      -webkit-appearance: none;
+      margin: 8px 0;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent-color);
+      cursor: ew-resize;
+      box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+    }
+
+    /* 按钮样式 */
+    button {
+      background: linear-gradient(135deg, var(--accent-color), hsl(270, 80%, 60%));
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      margin-right: 8px;
+      margin-bottom: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    button svg {
+      margin-right: 6px;
+    }
+
+    .stats {
+      font-size: 12px;
+      opacity: 0.7;
+      margin-top: 12px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* 重力方向指示器 */
+    .gravity-indicator {
+      width: 80px;
+      height: 80px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 50%;
+      position: relative;
+      margin: 12px auto;
+    }
+
+    .gravity-arrow {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 4px;
+      height: 30px;
+      background: var(--accent-color);
+      transform-origin: bottom center;
+      border-radius: 2px;
+    }
+
+    /* 粒子计数器动画 */
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+
+    .particle-count {
+      color: var(--accent-color);
+      font-weight: bold;
+      display: inline-block;
+      animation: pulse 2s infinite;
+    }
+
+    /* 响应式调整 */
+    @media (max-width: 600px) {
+      #controls {
+        width: calc(100% - 40px);
+        top: 10px;
+        left: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  
+  <div id="controls">
+    <div class="panel-title">
+      <svg width="20" height="20" viewBox="0 0 24 24">
+        <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4M12,6A6,6 0 0,0 6,12A6,6 0 0,0 12,18A6,6 0 0,0 18,12A6,6 0 0,0 12,6Z"/>
+      </svg>
+      <span>宇宙粒子控制台</span>
+    </div>
+
+    <div class="control-group">
+      <label>重力方向</label>
+      <div class="gravity-indicator">
+        <div class="gravity-arrow" id="gravityArrow"></div>
+      </div>
+      <div style="display: flex; gap: 10px;">
+        <div style="flex: 1;">
+          <label>X 轴</label>
+          <input type="range" id="gravityX" min="-1" max="1" step="0.05" value="0">
+        </div>
+        <div style="flex: 1;">
+          <label>Y 轴</label>
+          <input type="range" id="gravityY" min="-1" max="1" step="0.05" value="0.5">
+        </div>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>粒子操作</label>
+      <div>
+        <button id="addParticle">
+          <svg width="16" height="16" viewBox="0 0 24 24">
+            <path fill="currentColor" d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"/>
+          </svg>
+          添加粒子
+        </button>
+        <button id="clear">
+          <svg width="16" height="16" viewBox="0 0 24 24">
+            <path fill="currentColor" d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
+          </svg>
+          清空
+        </button>
+        <button id="pause">
+          <svg width="16" height="16" viewBox="0 0 24 24">
+            <path fill="currentColor" d="M14,19H18V5H14M6,19H10V5H6V19Z"/>
+          </svg>
+          暂停
+        </button>
+      </div>
+    </div>
+
+    <div class="stats">
+      <span>粒子数量: <span class="particle-count" id="count">0</span></span>
+      <span>FPS: <span id="fps">0</span></span>
+    </div>
+  </div>
+
+  <script>
+    // 初始化画布
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // 物理参数
+    const particles = [];
+    let gravity = { x: 0, y: 0.5 };
+    let isPaused = false;
+    let lastTime = 0;
+    let fps = 0;
+
+    // 粒子类
+    class Particle {
+      constructor(x, y, radius = 5) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.mass = radius * 0.1;
+        this.vx = (Math.random() - 0.5) * 2;
+        this.vy = (Math.random() - 0.5) * 2;
+        this.color = `hsla(${Math.random() * 360}, 80%, 60%, 0.8)`;
+        this.trail = [];
+        this.maxTrail = 20;
+      }
+
+      update() {
+        // 应用重力
+        this.vx += gravity.x * 0.1;
+        this.vy += gravity.y * 0.1;
+
+        // 更新位置
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // 记录轨迹
+        this.trail.push({ x: this.x, y: this.y });
+        if (this.trail.length > this.maxTrail) {
+          this.trail.shift();
+        }
+
+        // 边界碰撞
+        if (this.x < this.radius || this.x > canvas.width - this.radius) {
+          this.vx *= -0.8;
+          this.x = Math.max(this.radius, Math.min(canvas.width - this.radius, this.x));
+        }
+        if (this.y < this.radius || this.y > canvas.height - this.radius) {
+          this.vy *= -0.8;
+          this.y = Math.max(this.radius, Math.min(canvas.height - this.radius, this.y));
+        }
+      }
+
+      draw() {
+        // 绘制轨迹
+        if (this.trail.length > 1) {
+          ctx.beginPath();
+          ctx.moveTo(this.trail[0].x, this.trail[0].y);
+          for (let i = 1; i < this.trail.length; i++) {
+            const alpha = i / this.trail.length;
+            ctx.strokeStyle = this.color.replace('0.8', alpha * 0.5);
+            ctx.lineWidth = this.radius * 0.5;
+            ctx.lineTo(this.trail[i].x, this.trail[i].y);
+            ctx.stroke();
+          }
+        }
+
+        // 绘制粒子
+        const gradient = ctx.createRadialGradient(
+          this.x, this.y, 0,
+          this.x, this.y, this.radius
+        );
+        gradient.addColorStop(0, this.color);
+        gradient.addColorStop(1, 'transparent');
+
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        // 高光效果
+        ctx.beginPath();
+        ctx.arc(
+          this.x - this.radius * 0.3,
+          this.y - this.radius * 0.3,
+          this.radius * 0.2,
+          0, Math.PI * 2
+        );
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.fill();
+      }
+    }
+
+    // 粒子间引力计算
+    function applyInteractions() {
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const p1 = particles[i];
+          const p2 = particles[j];
+
+          const dx = p2.x - p1.x;
+          const dy = p2.y - p1.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist < p1.radius + p2.radius) {
+            // 碰撞响应
+            [p1.vx, p2.vx] = [p2.vx * 0.9, p1.vx * 0.9];
+            [p1.vy, p2.vy] = [p2.vy * 0.9, p1.vy * 0.9];
+          } else if (dist < 200) {
+            // 引力计算
+            const force = 0.02 * p1.mass * p2.mass / (dist * dist + 10);
+            const fx = force * dx / dist;
+            const fy = force * dy / dist;
+
+            p1.vx += fx / p1.mass;
+            p1.vy += fy / p1.mass;
+            p2.vx -= fx / p2.mass;
+            p2.vy -= fy / p2.mass;
+          }
+        }
+      }
+    }
+
+    // 更新重力方向指示器
+    function updateGravityIndicator() {
+      const arrow = document.getElementById('gravityArrow');
+      const angle = Math.atan2(gravity.y, gravity.x);
+      const strength = Math.min(1, Math.sqrt(gravity.x * gravity.x + gravity.y * gravity.y) * 2);
+      
+      arrow.style.transform = `
+        translate(-50%, -50%) 
+        rotate(${angle}rad) 
+        scaleY(${strength})
+      `;
+      arrow.style.opacity = strength;
+    }
+
+    // FPS计算
+    function calculateFPS(now) {
+      if (!lastTime) {
+        lastTime = now;
+        return;
+      }
+      const delta = now - lastTime;
+      fps = Math.round(1000 / delta);
+      lastTime = now;
+      document.getElementById('fps').textContent = fps;
+    }
+
+    // 动画循环
+    function animate(now) {
+      if (!isPaused) {
+        // 半透明清除实现拖尾效果
+        ctx.fillStyle = 'rgba(15, 15, 25, 0.2)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        applyInteractions();
+        
+        particles.forEach(p => {
+          p.update();
+          p.draw();
+        });
+
+        calculateFPS(now);
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    // 交互事件
+    canvas.addEventListener('click', (e) => {
+      const radius = Math.random() * 10 + 5;
+      particles.push(new Particle(e.clientX, e.clientY, radius));
+      updateParticleCount();
+    });
+
+    document.getElementById('addParticle').addEventListener('click', () => {
+      const x = Math.random() * canvas.width;
+      const y = Math.random() * canvas.height;
+      particles.push(new Particle(x, y, Math.random() * 15 + 5));
+      updateParticleCount();
+    });
+
+    document.getElementById('pause').addEventListener('click', () => {
+      isPaused = !isPaused;
+      document.getElementById('pause').innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24">
+          <path fill="currentColor" d="${isPaused ? 'M8,5.14V19.14L19,12.14L8,5.14Z' : 'M14,19H18V5H14M6,19H10V5H6V19Z'}"/>
+        </svg>
+        ${isPaused ? '继续' : '暂停'}
+      `;
+    });
+
+    document.getElementById('clear').addEventListener('click', () => {
+      particles.length = 0;
+      updateParticleCount();
+    });
+
+    document.getElementById('gravityX').addEventListener('input', (e) => {
+      gravity.x = parseFloat(e.target.value);
+      updateGravityIndicator();
+    });
+
+    document.getElementById('gravityY').addEventListener('input', (e) => {
+      gravity.y = parseFloat(e.target.value);
+      updateGravityIndicator();
+    });
+
+    function updateParticleCount() {
+      const countElement = document.getElementById('count');
+      countElement.textContent = particles.length;
+      if (particles.length > 0) {
+        countElement.style.animation = 'none';
+        setTimeout(() => {
+          countElement.style.animation = 'pulse 0.5s';
+        }, 10);
+      }
+    }
+
+    // 启动
+    animate();
+    updateGravityIndicator();
+
+    // 响应式调整
+    window.addEventListener('resize', () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
+
+    // 初始粒子
+    for (let i = 0; i < 5; i++) {
+      const x = Math.random() * canvas.width;
+      const y = Math.random() * canvas.height;
+      particles.push(new Particle(x, y, Math.random() * 10 + 5));
+    }
+    updateParticleCount();
+  </script>
+</body>
+</html>
